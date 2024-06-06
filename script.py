@@ -2,6 +2,7 @@ import os
 import shutil
 
 desktop_dir = "C:\\Users\\husaa\\Desktop\\"
+downloads_dir = "C:\\Users\\husaa\\Downloads\\"
 documents_dir = "C:\\Users\\husaa\\Documents\\"
 images_dir = "C:\\Users\\husaa\\Gallery\\"
 txt_dir = "C:\\Users\\husaa\\Documents\\Text Files\\"
@@ -36,15 +37,14 @@ def createFolders():
     createDir("Word Documents")
     createDir("XML Documents")
 
-def checkDesktop():
-    os.chdir(desktop_dir)
+def checkDir(dir):
+    os.chdir(dir)
     files = os.listdir()
 
     for filename in files:
         filename = filename.split('.')
-        if ( len(filename) == 1 ): # This means its a folder, not a files
+        if ( len(filename) == 1 ): # This means its a folder, not a file
             continue
-
 
         else:
             ext = filename[1]
@@ -52,22 +52,28 @@ def checkDesktop():
 
             match ext:
                 case "txt":
-                    shutil.move(f"{desktop_dir}{filename}", f"{txt_dir}{filename}")
+                    shutil.move(f"{dir}{filename}", f"{txt_dir}{filename}")
 
                 case "pdf" | "PDF":
-                    shutil.move(f"{desktop_dir}{filename}", f"{pdf_dir}{filename}")
+                    shutil.move(f"{dir}{filename}", f"{pdf_dir}{filename}")
 
                 case "xls" | "xlsx" | "xlsm" | "csv":
-                    shutil.move(f"{desktop_dir}{filename}", f"{spreadsheet_dir}{filename}")
+                    shutil.move(f"{dir}{filename}", f"{spreadsheet_dir}{filename}")
 
                 case "doc" | "docx":
-                    shutil.move(f"{desktop_dir}{filename}", f"{word_dir}{filename}")
+                    shutil.move(f"{dir}{filename}", f"{word_dir}{filename}")
 
                 case "xml":
-                    shutil.move(f"{desktop_dir}{filename}", f"{xml_dir}{filename}")
+                    shutil.move(f"{dir}{filename}", f"{xml_dir}{filename}")
+
+                case "exe" | "lnk":
+                    if ( dir != desktop_dir ):
+                        shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
 
 def main():
     createFolders()
-    checkDesktop()
+    while(True):
+        checkDir(desktop_dir)
+        checkDir(downloads_dir)
 
 main()
