@@ -1,4 +1,5 @@
 import os
+import shutil
 
 def createDir(path):
     try:
@@ -35,7 +36,9 @@ def checkDesktop():
 
         else:
             if ( filename[1] == "txt" ):
-                pass
+                filename = '.'.join(filename)
+                shutil.move(f"C:\\Users\\husaa\\Desktop\\{filename}",
+                            f"C:\\Users\\husaa\\Documents\\Text Files\\{filename}")
 
 def main():
     createFolders()
