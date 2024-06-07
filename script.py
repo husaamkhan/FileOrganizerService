@@ -59,9 +59,11 @@ class EventHandler(FileSystemEventHandler):
             ext = filename.split('.')[1]
             print(ext)
 
-            if ( ext not in ["tmp", "crdownload", "part"] ):
-                print(filename)
-                moveFile(dir, filename, ext)
+            if ( ext != "tmp" and ".crdownload" not in filename ):
+                print(f"Not temp: {filename}")
+                if ( os.path.exists(event.src_path) ):
+                    print("file still exists, moving file")
+                    moveFile(dir, filename, ext)
 
 def createDir(path):
     try:
@@ -100,6 +102,7 @@ def checkDir(dir):
         moveFile(dir, filename, ext)
 
 def main():
+    print("Husaam's file organizer is running!")
     createFolders()
 #    while(True):
 #        checkDir(desktop_dir)
@@ -125,5 +128,6 @@ def main():
             print(e)
             obs1.stop()
             obs2.stop()
+            print("Terminating...")
 
 main()
