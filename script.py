@@ -91,7 +91,7 @@ class EventHandler(FileSystemEventHandler):
                     moveFile(dir, filename, ext)
 
 class FileOrganizerService(win_service.ServiceFramework):
-    _scv_name_ = "FileOrganizerService"
+    _svc_name_ = "FileOrganizerService"
     _svc_display_name_ = "FileOrganizerService"
     _svc_description_ = "Automatically organizes Desktop and Downloads files by filetype."
 
