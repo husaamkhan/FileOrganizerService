@@ -2,6 +2,8 @@ import os
 import shutil
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+import win32serviceutil as win_service
+import win32event as win_event
 
 desktop_dir = "C:\\Users\\husaa\\Desktop\\"
 downloads_dir = "C:\\Users\\husaa\\Downloads\\"
@@ -38,32 +40,6 @@ def moveFile(dir, filename, ext):
                 if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
                     shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
 
-class EventHandler(FileSystemEventHandler):
-    def on_created(self, event):
-        pass
-#        if not os.path.isdir(event.src_path):
-#            dir, filename = os.path.split(event.src_path)
-#            dir = f"{dir}\\"
-#            ext = filename.split('.')[1]
-#            print(event.src_path)
-
-#            if ( ext not in ["tmp", "crdownload", "part"] ): # That means a file was downloaded and the temp file was detected
-#                print(filename)
-#                moveFile(dir, filename, ext)
-
-    def on_modified(self, event):
-        if not os.path.isdir(event.src_path):
-            print(f"Modified: {event.src_path}")
-            dir, filename = os.path.split(event.src_path)
-            dir = f"{dir}\\"
-            ext = filename.split('.')[1]
-            print(ext)
-
-            if ( ext != "tmp" and ".crdownload" not in filename ):
-                print(f"Not temp: {filename}")
-                if ( os.path.exists(event.src_path) ):
-                    print("file still exists, moving file")
-                    moveFile(dir, filename, ext)
 
 def createDir(path):
     try:
@@ -101,13 +77,43 @@ def checkDir(dir):
         ext = filename.split('.')[1]
         moveFile(dir, filename, ext)
 
-def main():
+class EventHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if not os.path.isdir(event.src_path):
+            dir, filename = os.path.split(event.src_path)
+            dir = f"{dir}\\"
+            ext = filename.split('.')[1]
+
+            if ( ext != "tmp" and ".crdownload" not in filename ):
+                print(f"Not temp: {filename}")
+                if ( os.path.exists(event.src_path) ):
+                    print("file still exists, moving file")
+                    moveFile(dir, filename, ext)
+
+class FileOrganizerService(win_service.ServiceFramework):
+    _scv_name_ = "FileOrganizerService"
+    _svc_display_name_ = "FileOrganizerService"
+    _svc_description_ = "Automatically organizes Desktop and Downloads files by filetype."
+
+    def __init__(self, args):
+        win_service.ServiceFramework.__init__(self, args)
+        self.event = win_event.CreateEvent(None, 0, 0, None)
+
+    def GetAcceptedControls(self):
+        result = win_service.ServiceFramework.GetAcceptedControls(self)
+        result |= win_service.SERVICE_ACCEPT_PRESHUTDOWN
+        return result
+
+    def SvcDoRun(self):
+        run()
+
+    def SvcStop(self):
+        self.ReportServiceStatus(win_service.SERVICE_STOP_PENDING)
+        win_event.SetEvent(self.event)
+
+def run():
     print("Husaam's file organizer is running!")
     createFolders()
-#    while(True):
-#        checkDir(desktop_dir)
-#        checkDir(downloads_dir)
-
     checkDir(desktop_dir)
     checkDir(downloads_dir)
 
@@ -130,4 +136,11 @@ def main():
             obs2.stop()
             print("Terminating...")
 
-main()
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(FileOrganizerService)
+        servicemanager.StartServiceCtrlDispatcher()
+
+    else:
+        win_service.HandleCommandLine(FileOrganizerService)
