@@ -4,6 +4,9 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import win32serviceutil as win_service
 import win32event as win_event
+import servicemanager
+import sys
+import logging
 
 desktop_dir = "C:\\Users\\husaa\\Desktop\\"
 downloads_dir = "C:\\Users\\husaa\\Downloads\\"
@@ -14,6 +17,13 @@ pdf_dir = "C:\\Users\\husaa\\Documents\\PDF Documents\\"
 spreadsheet_dir = "C:\\Users\\husaa\\Documents\\Spreadsheets\\"
 word_dir = "C:\\Users\\husaa\\Documents\\Word Documents\\"
 xml_dir = "C:\\Users\\husaa\\Documents\\XML Documents\\"
+
+def setup_logging():
+    logging.basicConfig(
+        filename = "C:\\dev\\Organizer\\ServiceLog.log",
+        level = logging.DEBUG,
+        format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
 
 def moveFile(dir, filename, ext):
     match ext:
@@ -95,6 +105,11 @@ class FileOrganizerService(win_service.ServiceFramework):
     _svc_display_name_ = "FileOrganizerService"
     _svc_description_ = "Automatically organizes Desktop and Downloads files by filetype."
 
+    event_handler = EventHandler() 
+    obs1 = Observer()
+
+    obs2 = Observer()
+
     def __init__(self, args):
         win_service.ServiceFramework.__init__(self, args)
         self.event = win_event.CreateEvent(None, 0, 0, None)
@@ -105,42 +120,46 @@ class FileOrganizerService(win_service.ServiceFramework):
         return result
 
     def SvcDoRun(self):
-        run()
+        logging.info("FileOrganizerService is starting")
+        self.ReportServiceStatus(win_service.SERVICE_RUNNING)
+        self.obs1.schedule(self.event_handler, path=desktop_dir, recursive=False)
+        self.obs2.schedule(self.event_handler, path=downloads_dir, recursive=False)
+
+
+        createFolders()
+        checkDir(desktop_dir)
+        checkDir(downloads_dir)
+
+        self.obs1.start()
+        self.obs2.start()
 
     def SvcStop(self):
+        logging.info("FileOrganizerService is stopping")
         self.ReportServiceStatus(win_service.SERVICE_STOP_PENDING)
         win_event.SetEvent(self.event)
-
-def run():
-    print("Husaam's file organizer is running!")
-    createFolders()
-    checkDir(desktop_dir)
-    checkDir(downloads_dir)
-
-    event_handler = EventHandler() 
-    obs1 = Observer()
-    obs1.schedule(event_handler, path=desktop_dir, recursive=False)
-
-    obs2 = Observer()
-    obs2.schedule(event_handler, path=downloads_dir, recursive=False)
-
-    obs1.start()
-    obs2.start()
-    
-    while True:
-        try:
-            pass
-        except KeyboardInterrupt as e:
-            print(e)
-            obs1.stop()
-            obs2.stop()
-            print("Terminating...")
+        logging.info("Stopping observers")
+        self.obs1.stop()
+        self.obs2.stop()
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        servicemanager.Initialize()
-        servicemanager.PrepareToHostSingle(FileOrganizerService)
-        servicemanager.StartServiceCtrlDispatcher()
+    setup_logging()
+    logging.info("Script executing")
+    
+    try:
+        if len(sys.argv) == 1:
+            logging.info("Initializing service manager")
+            servicemanager.Initialize()
+            logging.info("Preparing to host single: FileOrganizerService")
+            servicemanager.PrepareToHostSingle(FileOrganizerService)
+            logging.info("Starting service control dispatcher")
+            servicemanager.StartServiceCtrlDispatcher()
 
-    else:
-        win_service.HandleCommandLine(FileOrganizerService)
+            # These 2 lines might be wrong
+            service = FileOrganizerService(sys.argv)
+            service.SvcDoRun()
+
+        else:
+            logging.info(f"Handling command line: {sys.argv}")
+            win_service.HandleCommandLine(FileOrganizerService)
+    except Exception as e:
+        logging.error(e)
