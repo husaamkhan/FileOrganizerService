@@ -2,7 +2,8 @@ import os
 import shutil
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import win32serviceutil as win_service
+import win32serviceutil as win_svc_util
+import win32service as win_svc
 import win32event as win_event
 import servicemanager
 import sys
@@ -26,30 +27,40 @@ def setup_logging():
     )
 
 def moveFile(dir, filename, ext):
+    new_dir = ""
     match ext:
         case "jpeg" | "jpg" | "gif" | "png" | "tiff":
             shutil.move(f"{dir}{filename}", f"{images_dir}{filename}")
+            new_dir = images_dir
 
         case "txt":
             shutil.move(f"{dir}{filename}", f"{txt_dir}{filename}")
+            new_dir = txt_dir
 
         case "pdf" | "PDF":
             shutil.move(f"{dir}{filename}", f"{pdf_dir}{filename}")
+            new_dir = pdf_dir
 
-        case "xls" | "xlsx" | "xlsm" | "csv":
+        case "xls" | "xlsx" | "xlsm":
             shutil.move(f"{dir}{filename}", f"{spreadsheet_dir}{filename}")
+            new_dir = spreadsheet_dir
 
         case "doc" | "docx":
             shutil.move(f"{dir}{filename}", f"{word_dir}{filename}")
+            new_dir = word_dir
 
         case "xml":
             shutil.move(f"{dir}{filename}", f"{xml_dir}{filename}")
+            new_dir = xml_dir
 
         case "exe" | "lnk":
             if ( dir != desktop_dir ):
                 if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
                     shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
+                    new_dir = desktop_dir
 
+    if new_dir:
+        logging.info(f"File {filename}.{ext} moved to {new_dir}")
 
 def createDir(path):
     try:
@@ -93,14 +104,14 @@ class EventHandler(FileSystemEventHandler):
             dir, filename = os.path.split(event.src_path)
             dir = f"{dir}\\"
             ext = filename.split('.')[1]
+            
+            logging.info(f"File {filename}.{ext} modified")
 
             if ( ext != "tmp" and ".crdownload" not in filename ):
-                print(f"Not temp: {filename}")
                 if ( os.path.exists(event.src_path) ):
-                    print("file still exists, moving file")
                     moveFile(dir, filename, ext)
 
-class FileOrganizerService(win_service.ServiceFramework):
+class FileOrganizerService(win_svc_util.ServiceFramework):
     _svc_name_ = "FileOrganizerService"
     _svc_display_name_ = "FileOrganizerService"
     _svc_description_ = "Automatically organizes Desktop and Downloads files by filetype."
@@ -111,17 +122,18 @@ class FileOrganizerService(win_service.ServiceFramework):
     obs2 = Observer()
 
     def __init__(self, args):
-        win_service.ServiceFramework.__init__(self, args)
+        logging.info("FileOrganizerService initializing")
+        win_svc_util.ServiceFramework.__init__(self, args)
         self.event = win_event.CreateEvent(None, 0, 0, None)
 
     def GetAcceptedControls(self):
-        result = win_service.ServiceFramework.GetAcceptedControls(self)
-        result |= win_service.SERVICE_ACCEPT_PRESHUTDOWN
+        result = win_svc_util.ServiceFramework.GetAcceptedControls(self)
+        result |= win_svc.SERVICE_ACCEPT_PRESHUTDOWN
         return result
 
     def SvcDoRun(self):
         logging.info("FileOrganizerService is starting")
-        self.ReportServiceStatus(win_service.SERVICE_RUNNING)
+        self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
         self.obs1.schedule(self.event_handler, path=desktop_dir, recursive=False)
         self.obs2.schedule(self.event_handler, path=downloads_dir, recursive=False)
 
@@ -133,13 +145,22 @@ class FileOrganizerService(win_service.ServiceFramework):
         self.obs1.start()
         self.obs2.start()
 
+        while True:
+            code = win_event.WaitForSingleObject(self.event, win_event.INFINITE)
+            if ( code == win_event.WAIT_OBJECT_0 ):
+                break
+
     def SvcStop(self):
         logging.info("FileOrganizerService is stopping")
-        self.ReportServiceStatus(win_service.SERVICE_STOP_PENDING)
+        self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
         win_event.SetEvent(self.event)
         logging.info("Stopping observers")
         self.obs1.stop()
         self.obs2.stop()
+        self.obs1.join()
+        self.obs2.join()
+        logging.info("FileOrganizerService stopped")
+        self.ReportServiceStatus(win_svc.SERVICE_STOPPED)
 
 if __name__ == "__main__":
     setup_logging()
@@ -156,6 +177,6 @@ if __name__ == "__main__":
 
         else:
             logging.info(f"Handling command line: {sys.argv}")
-            win_service.HandleCommandLine(FileOrganizerService)
+            win_svc_util.HandleCommandLine(FileOrganizerService)
     except Exception as e:
         logging.error(e)
