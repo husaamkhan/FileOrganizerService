@@ -154,10 +154,6 @@ if __name__ == "__main__":
             logging.info("Starting service control dispatcher")
             servicemanager.StartServiceCtrlDispatcher()
 
-            # These 2 lines might be wrong
-            service = FileOrganizerService(sys.argv)
-            service.SvcDoRun()
-
         else:
             logging.info(f"Handling command line: {sys.argv}")
             win_service.HandleCommandLine(FileOrganizerService)
