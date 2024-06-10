@@ -7,16 +7,25 @@ import win32service as win_svc
 import win32event as win_event
 import servicemanager
 import sys
-import logging
 import wmi
+import ctypes
+
+def showErrorMessage(message):
+    WMI_OK = 0x00000000
+    WMI_ICON = 0x00000010
+    ctypes.windll.user32.MessageBoxW(0, message, "FileOrganizerService Error", WMI_OK| WMI_ICON)
 
 def getLoggedOnUser():
-    c = wmi.WMI()
-    for session in c.Win32_LogonSession():
-        if session.LogonType == 2:  # 2 is Interactive Logon
-            users = session.references("Win32_LoggedOnUser")
-            if users:
-                return users[0].Antecedent.Name
+    try:
+        c = wmi.WMI()
+        for session in c.Win32_LogonSession():
+            if session.LogonType == 2:  # 2 is Interactive Logon
+                users = session.references("Win32_LoggedOnUser")
+                if users:
+                    return users[0].Antecedent.Name
+    except Exception as e:
+        showErrorMessage(f"Error identifying logged in user: {e}")
+
     return None
 
 def setDirs(user):
@@ -34,54 +43,39 @@ def setDirs(user):
     word_dir = f"{documents_dir}Word Documents\\"
     xml_dir = f"{documents_dir}XML Documents\\"
 
-def setup_logging():
-    logging.basicConfig(
-        filename = "C:\\dev\\Organizer\\ServiceLog.log",
-        level = logging.DEBUG,
-        format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
 def moveFile(dir, filename, ext):
-    new_dir = ""
-    match ext:
-        case "jpeg" | "jpg" | "gif" | "png" | "tiff":
-            shutil.move(f"{dir}{filename}", f"{images_dir}{filename}")
-            new_dir = images_dir
+    try:
+        match ext:
+            case "jpeg" | "jpg" | "gif" | "png" | "tiff":
+                shutil.move(f"{dir}{filename}", f"{images_dir}{filename}")
 
-        case "txt":
-            shutil.move(f"{dir}{filename}", f"{txt_dir}{filename}")
-            new_dir = txt_dir
+            case "txt":
+                shutil.move(f"{dir}{filename}", f"{txt_dir}{filename}")
 
-        case "pdf" | "PDF":
-            shutil.move(f"{dir}{filename}", f"{pdf_dir}{filename}")
-            new_dir = pdf_dir
+            case "pdf" | "PDF":
+                shutil.move(f"{dir}{filename}", f"{pdf_dir}{filename}")
 
-        case "xls" | "xlsx" | "xlsm":
-            shutil.move(f"{dir}{filename}", f"{spreadsheet_dir}{filename}")
-            new_dir = spreadsheet_dir
+            case "xls" | "xlsx" | "xlsm":
+                shutil.move(f"{dir}{filename}", f"{spreadsheet_dir}{filename}")
 
-        case "doc" | "docx":
-            shutil.move(f"{dir}{filename}", f"{word_dir}{filename}")
-            new_dir = word_dir
+            case "doc" | "docx":
+                shutil.move(f"{dir}{filename}", f"{word_dir}{filename}")
 
-        case "xml":
-            shutil.move(f"{dir}{filename}", f"{xml_dir}{filename}")
-            new_dir = xml_dir
+            case "xml":
+                shutil.move(f"{dir}{filename}", f"{xml_dir}{filename}")
 
-        case "exe" | "lnk":
-            if ( dir != desktop_dir ):
-                if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
-                    shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
-                    new_dir = desktop_dir
-
-    if new_dir:
-        logging.info(f"File {filename}.{ext} moved to {new_dir}")
+            case "exe" | "lnk":
+                if ( dir != desktop_dir ):
+                    if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
+                        shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
+    except Exception as e:
+        showErrorMessage(f"Error moving file {filename}.{ext}: {e}")
 
 def createDir(path):
     try:
-        os.mkdir(path)
-    except FileExistsError:
-        pass
+        os.makedirs(path, exist_ok=True)
+    except Exception as e:
+        showErrorMessage(f"Error creating directory {path}: {e}")
 
 def createFolders():
     try:
@@ -97,18 +91,21 @@ def createFolders():
         createDir("Word Documents")
         createDir("XML Documents")
     except Exception as e:
-        logging.error("Error creating folders: {e}")
+        showErrorMessage(f"Error creating folders: {e}")
 
 def checkDir(dir):
-    os.chdir(dir)
-    files = os.listdir()
+    try:
+        os.chdir(dir)
+        files = os.listdir()
 
-    for filename in files:
-        if os.path.isdir(filename):
-            continue
+        for filename in files:
+            if os.path.isdir(filename):
+                continue
 
-        ext = filename.split('.')[1]
-        moveFile(dir, filename, ext)
+            ext = filename.split('.')[1]
+            moveFile(dir, filename, ext)
+    except Exception as e:
+        showErrorMessage(f"Error checking directories: {e}")
 
 class EventHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -117,8 +114,6 @@ class EventHandler(FileSystemEventHandler):
             dir = f"{dir}\\"
             ext = filename.split('.')[1]
             
-            logging.info(f"File {filename}.{ext} modified")
-
             if ( ext != "tmp" and ".crdownload" not in filename ):
                 if ( os.path.exists(event.src_path) ):
                     moveFile(dir, filename, ext)
@@ -134,7 +129,6 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
     obs2 = Observer()
 
     def __init__(self, args):
-        logging.info("FileOrganizerService initializing")
         win_svc_util.ServiceFramework.__init__(self, args)
         self.event = win_event.CreateEvent(None, 0, 0, None)
 
@@ -144,54 +138,46 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
         return result
 
     def SvcDoRun(self):
-        logging.info("FileOrganizerService is starting")
-        self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
+        try:
+            self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
 
-        user = getLoggedOnUser()
-        setDirs(user)
+            user = getLoggedOnUser()
+            setDirs(user)
 
-        createFolders()
-        checkDir(desktop_dir)
-        checkDir(downloads_dir)
+            createFolders()
+            checkDir(desktop_dir)
+            checkDir(downloads_dir)
 
-        self.obs1.schedule(self.event_handler, path=desktop_dir, recursive=False)
-        self.obs2.schedule(self.event_handler, path=downloads_dir, recursive=False)
+            self.obs1.schedule(self.event_handler, path=desktop_dir, recursive=False)
+            self.obs2.schedule(self.event_handler, path=downloads_dir, recursive=False)
 
-        self.obs1.start()
-        self.obs2.start()
+            self.obs1.start()
+            self.obs2.start()
 
-        while True:
-            code = win_event.WaitForSingleObject(self.event, win_event.INFINITE)
-            if ( code == win_event.WAIT_OBJECT_0 ):
-                break
+            while True:
+                code = win_event.WaitForSingleObject(self.event, win_event.INFINITE)
+                if ( code == win_event.WAIT_OBJECT_0 ):
+                    break
+        except Exception as e:
+            showErrorMessage(f"Error running service: {e}")
 
     def SvcStop(self):
-        logging.info("FileOrganizerService is stopping")
         self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
         win_event.SetEvent(self.event)
-        logging.info("Stopping observers")
         self.obs1.stop()
         self.obs2.stop()
         self.obs1.join()
         self.obs2.join()
-        logging.info("FileOrganizerService stopped")
         self.ReportServiceStatus(win_svc.SERVICE_STOPPED)
 
 if __name__ == "__main__":
-    setup_logging()
-    logging.info("Script executing")
-    
     try:
         if len(sys.argv) == 1:
-            logging.info("Initializing service manager")
             servicemanager.Initialize()
-            logging.info("Preparing to host single: FileOrganizerService")
             servicemanager.PrepareToHostSingle(FileOrganizerService)
-            logging.info("Starting service control dispatcher")
             servicemanager.StartServiceCtrlDispatcher()
 
         else:
-            logging.info(f"Handling command line: {sys.argv}")
             win_svc_util.HandleCommandLine(FileOrganizerService)
     except Exception as e:
-        logging.error(e)
+        showErrorMessage(f"Error starting service: {e}")
