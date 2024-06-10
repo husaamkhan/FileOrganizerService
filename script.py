@@ -8,16 +8,31 @@ import win32event as win_event
 import servicemanager
 import sys
 import logging
+import wmi
 
-desktop_dir = "C:\\Users\\husaa\\Desktop\\"
-downloads_dir = "C:\\Users\\husaa\\Downloads\\"
-documents_dir = "C:\\Users\\husaa\\Documents\\"
-images_dir = "C:\\Users\\husaa\\Pictures\\"
-txt_dir = "C:\\Users\\husaa\\Documents\\Text Files\\"
-pdf_dir = "C:\\Users\\husaa\\Documents\\PDF Documents\\"
-spreadsheet_dir = "C:\\Users\\husaa\\Documents\\Spreadsheets\\"
-word_dir = "C:\\Users\\husaa\\Documents\\Word Documents\\"
-xml_dir = "C:\\Users\\husaa\\Documents\\XML Documents\\"
+def getLoggedOnUser():
+    c = wmi.WMI()
+    for session in c.Win32_LogonSession():
+        if session.LogonType == 2:  # 2 is Interactive Logon
+            users = session.references("Win32_LoggedOnUser")
+            if users:
+                return users[0].Antecedent.Name
+    return None
+
+def setDirs(user):
+    global home_dir, desktop_dir, downloads_dir, documents_dir, images_dir, txt_dir, pdf_dir
+    global spreadsheet_dir, word_dir, xml_dir
+
+    home_dir = f"C:\\Users\\{user}"
+    desktop_dir = f"{home_dir}\\Desktop\\"
+    downloads_dir = f"{home_dir}\\Downloads\\"
+    documents_dir = f"{home_dir}\\Documents\\"
+    images_dir = f"{home_dir}\\Pictures\\"
+    txt_dir = f"{documents_dir}Text Files\\"
+    pdf_dir = f"{documents_dir}PDF Documents\\"
+    spreadsheet_dir = f"{documents_dir}Spreadsheets\\"
+    word_dir = f"{documents_dir}Word Documents\\"
+    xml_dir = f"{documents_dir}XML Documents\\"
 
 def setup_logging():
     logging.basicConfig(
@@ -71,21 +86,18 @@ def createDir(path):
 def createFolders():
     try:
         os.chdir(desktop_dir)
-    except FileNotFoundError as e:
-        print(e)
 
-    createDir("Programs")
+        createDir("Programs")
 
-    try:
         os.chdir(documents_dir)
-    except FileNotFoundError as e:
-        print(e)
 
-    createDir("Text Files")
-    createDir("PDF Documents")
-    createDir("Spreadsheets")
-    createDir("Word Documents")
-    createDir("XML Documents")
+        createDir("Text Files")
+        createDir("PDF Documents")
+        createDir("Spreadsheets")
+        createDir("Word Documents")
+        createDir("XML Documents")
+    except Exception as e:
+        logging.error("Error creating folders: {e}")
 
 def checkDir(dir):
     os.chdir(dir)
@@ -134,13 +146,16 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
     def SvcDoRun(self):
         logging.info("FileOrganizerService is starting")
         self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
-        self.obs1.schedule(self.event_handler, path=desktop_dir, recursive=False)
-        self.obs2.schedule(self.event_handler, path=downloads_dir, recursive=False)
 
+        user = getLoggedOnUser()
+        setDirs(user)
 
         createFolders()
         checkDir(desktop_dir)
         checkDir(downloads_dir)
+
+        self.obs1.schedule(self.event_handler, path=desktop_dir, recursive=False)
+        self.obs2.schedule(self.event_handler, path=downloads_dir, recursive=False)
 
         self.obs1.start()
         self.obs2.start()
