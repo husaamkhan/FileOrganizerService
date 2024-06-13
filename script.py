@@ -10,16 +10,8 @@ import sys
 import wmi
 import logging
 
-def setup_logging():
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(level)s - %(message)s')
-
-    handler = LogHandler()
-    handler.setFormatter(formatter)
-    
-    
-    logger = logging.getLogger()
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
+def setup_logging:
+    pass
 
 def getLoggedOnUser():
     try:
@@ -30,7 +22,9 @@ def getLoggedOnUser():
                 if users:
                     return users[0].Antecedent.Name
     except Exception as e:
-        logging.error(str(e))
+        #        logging.info(traceback.format_exc())
+#        logging.error("Error in get logged on user")
+        pass
 
     return None
 
@@ -83,16 +77,19 @@ def moveFile(dir, filename, ext):
                         shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
                         new_dir = desktop_dir
         if new_dir:
-            logging.info(f"Moved file {filename}.{ext} from {dir} to {new_dir}")
+            #            logging.info(f"Moved file {filename}.{ext} from {dir} to {new_dir}")
+            pass
 
     except Exception as e:
-        logging.error(str(e))
+        #        logging.error(str(e))
+        pass
 
 def createDir(path):
     try:
         os.makedirs(path, exist_ok=True)
     except Exception as e:
-        logging.error(str(e))
+        #        logging.error(str(e))
+        pass
 
 def createFolders():
     try:
@@ -108,7 +105,8 @@ def createFolders():
         createDir("Word Documents")
         createDir("XML Documents")
     except Exception as e:
-        logging.error(str(e))
+        #        logging.error(str(e))
+        pass
 
 def checkDir(dir):
     try:
@@ -122,11 +120,8 @@ def checkDir(dir):
             ext = filename.split('.')[1]
             moveFile(dir, filename, ext)
     except Exception as e:
-        logging.error(str(e))
-
-class LogHandler(logging.Handler):
-    def emit(self, record):
-        servicemanager.LogInfoMsg(record.getMessage())
+        #        logging.error(str(e))
+        pass
 
 class EventHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -161,8 +156,6 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
     def SvcDoRun(self):
         try:
             self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
-            logging.info("Service started")
-
             user = getLoggedOnUser()
             setDirs(user)
 
@@ -179,14 +172,15 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
             while True:
                 code = win_event.WaitForSingleObject(self.event, win_event.INFINITE)
                 if ( code == win_event.WAIT_OBJECT_0 ):
-                    logging.info("Stop request recieved")
+                    #                    logging.info("Stop request recieved")
                     break
         except Exception as e:
-           logging.error(str(e))
+            #            logging.info(traceback.format_exc())
+            pass
 
     def SvcStop(self):
         self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
-        logging.info("Service stopping")
+#        logging.info("Service stopping")
         win_event.SetEvent(self.event)
         self.obs1.stop()
         self.obs2.stop()
@@ -195,12 +189,10 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
         self.ReportServiceStatus(win_svc.SERVICE_STOPPED)
 
 if __name__ == "__main__":
-    setup_logging()
     if len(sys.argv) == 1:
         servicemanager.Initialize()
         servicemanager.PrepareToHostSingle(FileOrganizerService)
         servicemanager.StartServiceCtrlDispatcher()
 
     else:
-        logging.info(f"Handling command: {sys.argv}")
         win_svc_util.HandleCommandLine(FileOrganizerService)
