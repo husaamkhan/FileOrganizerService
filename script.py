@@ -8,12 +8,34 @@ import win32event as win_event
 import servicemanager
 import sys
 import wmi
-import ctypes
+import logging
 
-def showErrorMessage(message):
-    WMI_OK = 0x00000000
-    WMI_ICON = 0x00000010
-    ctypes.windll.user32.MessageBoxW(0, message, "FileOrganizerService Error", WMI_OK| WMI_ICON)
+def setup_logging():
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(level)s - %(message)s')
+    
+    handler = LogHandler()
+    handler.setFormatter(formatter)
+    
+    file_handler = logging.FileHandler("C:\\Program Files\\FileOrganizerServiceLog\\ServiceLog.log")
+    file_handler.setFormatter(formatter)
+    
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+def log(level, message):
+    match level:
+        case "INFO":
+            logging.info(message)
+
+        case "WARNING":
+            logging.warning(message)
+        
+        case "ERROR":
+            logging.error(message)
+
+        case "CRITICAL":
+            logging.critical(message)
 
 def getLoggedOnUser():
     try:
@@ -24,7 +46,7 @@ def getLoggedOnUser():
                 if users:
                     return users[0].Antecedent.Name
     except Exception as e:
-        showErrorMessage(f"Error identifying logged in user: {e}")
+        log("ERROR", e)
 
     return None
 
@@ -69,13 +91,13 @@ def moveFile(dir, filename, ext):
                     if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
                         shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
     except Exception as e:
-        showErrorMessage(f"Error moving file {filename}.{ext}: {e}")
+        log("ERROR", e)
 
 def createDir(path):
     try:
         os.makedirs(path, exist_ok=True)
     except Exception as e:
-        showErrorMessage(f"Error creating directory {path}: {e}")
+        log("ERROR", e)
 
 def createFolders():
     try:
@@ -91,7 +113,7 @@ def createFolders():
         createDir("Word Documents")
         createDir("XML Documents")
     except Exception as e:
-        showErrorMessage(f"Error creating folders: {e}")
+        log("ERROR", e)
 
 def checkDir(dir):
     try:
@@ -105,7 +127,11 @@ def checkDir(dir):
             ext = filename.split('.')[1]
             moveFile(dir, filename, ext)
     except Exception as e:
-        showErrorMessage(f"Error checking directories: {e}")
+        log("ERROR", e)
+
+class LogHandler(logging.Handler):
+    def emit(self, record):
+        servicemanager.LogInfoMsg(record.getMessage())
 
 class EventHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -159,7 +185,7 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
                 if ( code == win_event.WAIT_OBJECT_0 ):
                     break
         except Exception as e:
-            showErrorMessage(f"Error running service: {e}")
+           log("ERROR", e)
 
     def SvcStop(self):
         self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
@@ -172,12 +198,15 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
 
 if __name__ == "__main__":
     try:
+        setup_logging()
+
         if len(sys.argv) == 1:
             servicemanager.Initialize()
             servicemanager.PrepareToHostSingle(FileOrganizerService)
             servicemanager.StartServiceCtrlDispatcher()
 
         else:
+            log("INFO", f"Handling command: {sys.argv}")
             win_svc_util.HandleCommandLine(FileOrganizerService)
     except Exception as e:
-        showErrorMessage(f"Error starting service: {e}")
+        log("ERROR", e)
