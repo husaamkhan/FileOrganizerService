@@ -12,30 +12,14 @@ import logging
 
 def setup_logging():
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(level)s - %(message)s')
-    
+
     handler = LogHandler()
     handler.setFormatter(formatter)
     
-    file_handler = logging.FileHandler("C:\\Program Files\\FileOrganizerServiceLog\\ServiceLog.log")
-    file_handler.setFormatter(formatter)
     
     logger = logging.getLogger()
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
-
-def log(level, message):
-    match level:
-        case "INFO":
-            logging.info(message)
-
-        case "WARNING":
-            logging.warning(message)
-        
-        case "ERROR":
-            logging.error(message)
-
-        case "CRITICAL":
-            logging.critical(message)
 
 def getLoggedOnUser():
     try:
@@ -44,10 +28,9 @@ def getLoggedOnUser():
             if session.LogonType == 2:  # 2 is Interactive Logon
                 users = session.references("Win32_LoggedOnUser")
                 if users:
-                    log("INFO", f"Logged on user with name {users[0].Antecedent.Name} found")
                     return users[0].Antecedent.Name
     except Exception as e:
-        log("ERROR", e)
+        logging.error(str(e))
 
     return None
 
@@ -100,16 +83,16 @@ def moveFile(dir, filename, ext):
                         shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
                         new_dir = desktop_dir
         if new_dir:
-            log("INFO", f"Moved file {filename}.{ext} from {dir} to {new_dir}")
+            logging.info(f"Moved file {filename}.{ext} from {dir} to {new_dir}")
 
     except Exception as e:
-        log("ERROR", e)
+        logging.error(str(e))
 
 def createDir(path):
     try:
         os.makedirs(path, exist_ok=True)
     except Exception as e:
-        log("ERROR", e)
+        logging.error(str(e))
 
 def createFolders():
     try:
@@ -125,7 +108,7 @@ def createFolders():
         createDir("Word Documents")
         createDir("XML Documents")
     except Exception as e:
-        log("ERROR", e)
+        logging.error(str(e))
 
 def checkDir(dir):
     try:
@@ -139,7 +122,7 @@ def checkDir(dir):
             ext = filename.split('.')[1]
             moveFile(dir, filename, ext)
     except Exception as e:
-        log("ERROR", e)
+        logging.error(str(e))
 
 class LogHandler(logging.Handler):
     def emit(self, record):
@@ -178,7 +161,7 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
     def SvcDoRun(self):
         try:
             self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
-            log("INFO", "Service started")
+            logging.info("Service started")
 
             user = getLoggedOnUser()
             setDirs(user)
@@ -196,14 +179,14 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
             while True:
                 code = win_event.WaitForSingleObject(self.event, win_event.INFINITE)
                 if ( code == win_event.WAIT_OBJECT_0 ):
-                    log("INFO", "Stop request recieved")
+                    logging.info("Stop request recieved")
                     break
         except Exception as e:
-           log("ERROR", e)
+           logging.error(str(e))
 
     def SvcStop(self):
         self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
-        log("INFO", "Service stopping")
+        logging.info("Service stopping")
         win_event.SetEvent(self.event)
         self.obs1.stop()
         self.obs2.stop()
@@ -212,16 +195,12 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
         self.ReportServiceStatus(win_svc.SERVICE_STOPPED)
 
 if __name__ == "__main__":
-    try:
-        setup_logging()
+    setup_logging()
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(FileOrganizerService)
+        servicemanager.StartServiceCtrlDispatcher()
 
-        if len(sys.argv) == 1:
-            servicemanager.Initialize()
-            servicemanager.PrepareToHostSingle(FileOrganizerService)
-            servicemanager.StartServiceCtrlDispatcher()
-
-        else:
-            log("INFO", f"Handling command: {sys.argv}")
-            win_svc_util.HandleCommandLine(FileOrganizerService)
-    except Exception as e:
-        log("ERROR", e)
+    else:
+        logging.info(f"Handling command: {sys.argv}")
+        win_svc_util.HandleCommandLine(FileOrganizerService)
