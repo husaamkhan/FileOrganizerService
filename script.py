@@ -44,6 +44,7 @@ def getLoggedOnUser():
             if session.LogonType == 2:  # 2 is Interactive Logon
                 users = session.references("Win32_LoggedOnUser")
                 if users:
+                    log("INFO", f"Logged on user with name {users[0].Antecedent.Name} found")
                     return users[0].Antecedent.Name
     except Exception as e:
         log("ERROR", e)
@@ -67,29 +68,40 @@ def setDirs(user):
 
 def moveFile(dir, filename, ext):
     try:
+        new_dir = ""
         match ext:
             case "jpeg" | "jpg" | "gif" | "png" | "tiff":
                 shutil.move(f"{dir}{filename}", f"{images_dir}{filename}")
+                new_dir = images_dir
 
             case "txt":
                 shutil.move(f"{dir}{filename}", f"{txt_dir}{filename}")
+                new_dir = txt_dir
 
             case "pdf" | "PDF":
                 shutil.move(f"{dir}{filename}", f"{pdf_dir}{filename}")
+                new_dir = pdf_dir
 
             case "xls" | "xlsx" | "xlsm":
                 shutil.move(f"{dir}{filename}", f"{spreadsheet_dir}{filename}")
+                new_dir = spreadsheet_dir
 
             case "doc" | "docx":
                 shutil.move(f"{dir}{filename}", f"{word_dir}{filename}")
+                new_dir = word_dir
 
             case "xml":
                 shutil.move(f"{dir}{filename}", f"{xml_dir}{filename}")
+                new_dir = xml_dir
 
             case "exe" | "lnk":
                 if ( dir != desktop_dir ):
                     if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
                         shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
+                        new_dir = desktop_dir
+        if new_dir:
+            log("INFO", f"Moved file {filename}.{ext} from {dir} to {new_dir}")
+
     except Exception as e:
         log("ERROR", e)
 
@@ -166,6 +178,7 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
     def SvcDoRun(self):
         try:
             self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
+            log("INFO", "Service started")
 
             user = getLoggedOnUser()
             setDirs(user)
@@ -183,12 +196,14 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
             while True:
                 code = win_event.WaitForSingleObject(self.event, win_event.INFINITE)
                 if ( code == win_event.WAIT_OBJECT_0 ):
+                    log("INFO", "Stop request recieved")
                     break
         except Exception as e:
            log("ERROR", e)
 
     def SvcStop(self):
         self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
+        log("INFO", "Service stopping")
         win_event.SetEvent(self.event)
         self.obs1.stop()
         self.obs2.stop()
