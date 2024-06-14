@@ -8,34 +8,26 @@ from watchdog.events import FileSystemEventHandler
 import win32serviceutil as win_svc_util
 import win32service as win_svc
 import win32event as win_event
+import win32evtlogutil
+import win32evtlog
 import servicemanager
 import sys
 import wmi
-from logging import Formatter, Handler
-import logging
 
-def setup_logging():
-    formatter = Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    handler = LogHandler()
-    handler.setFormatter(formatter)
+ID_START = 0
+ID_STOP = 1
+ID_GENERAL = 2
+ID_ERR = 3
+
+def log(id, e, message):
+    event_type = win32evtlog.EVENTLOG_INFORMATION_TYPE
+
+    if ( e == "ERROR" ):
+        event_type = win32evtlog.EVENTLOG_ERROR_TYPE
+
+    win32evtlogutil.ReportEvent("FileOrganizerService", id, eventType=event_type, strings=message)
     
-    logger = logging.getLogger()
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO) # Prevents debug logs
-
-def log(level, message):
-    match level:
-        case "INFO":
-            logging.info(message)
-
-        case "WARNING":
-            logging.warning(message)
-
-        case "ERROR":
-            logging.error(message)
-        
-        case "CRITICAL":
-            logging.critical(message)
+>>>>>>> temp_branch
 
 def getLoggedOnUser():
     try:
@@ -45,8 +37,9 @@ def getLoggedOnUser():
                 users = session.references("Win32_LoggedOnUser")
                 if users:
                     return users[0].Antecedent.Name
+
     except Exception as e:
-        log("ERROR", e)
+        log(ID_ERR, "ERROR", ["Error", f"Error identifying logged in user: {e}"])
 
     return None
 
@@ -67,38 +60,49 @@ def setDirs(user):
 
 def moveFile(dir, filename, ext):
     try:
+        new_dir = ""
         match ext:
             case "jpeg" | "jpg" | "gif" | "png" | "tiff":
                 shutil.move(f"{dir}{filename}", f"{images_dir}{filename}")
+                new_dir = images_dir
 
             case "txt":
                 shutil.move(f"{dir}{filename}", f"{txt_dir}{filename}")
+                new_dir = txt_dir
 
             case "pdf" | "PDF":
                 shutil.move(f"{dir}{filename}", f"{pdf_dir}{filename}")
+                new_dir = pdf_dir
 
             case "xls" | "xlsx" | "xlsm":
                 shutil.move(f"{dir}{filename}", f"{spreadsheet_dir}{filename}")
+                new_dir = spreadsheet_dir
 
             case "doc" | "docx":
                 shutil.move(f"{dir}{filename}", f"{word_dir}{filename}")
+                new_dir = word_dir
 
             case "xml":
                 shutil.move(f"{dir}{filename}", f"{xml_dir}{filename}")
+                new_dir = xml_dir
 
             case "exe" | "lnk":
                 if ( dir != desktop_dir ):
                     if ( "INSTALL" not in filename.upper() and "SETUP" not in filename.upper() ):
                         shutil.move(f"{dir}{filename}", f"{desktop_dir}{filename}")
+                        new_dir = desktop_dir
+
+        if new_dir:
+            log(ID_GENERAL, "INFO", ["Information:", f"Moved file {filename}.{ext} from {dir} to {new_dir}"])
 
     except Exception as e:
-        log("ERROR", e)
+        log(ID_ERR, "ERROR", ["Error:", f"Error moving file {filename}.{ext}: {e}"])
 
 def createDir(path):
     try:
         os.makedirs(path, exist_ok=True)
     except Exception as e:
-        log("ERROR", e)
+        log(ID_ERR, "ERROR", ["Error:", f"Error creating directory {path}: {e}"])
 
 def createFolders():
     try:
@@ -110,7 +114,7 @@ def createFolders():
         createDir("Word Documents")
         createDir("XML Documents")
     except Exception as e:
-        log("ERROR", e)
+        log(ID_ERR, "ERROR", ["Error:", f"Error creating folders: {e}"])
 
 def checkDir(dir):
     try:
@@ -124,11 +128,7 @@ def checkDir(dir):
             ext = filename.split('.')[1]
             moveFile(dir, filename, ext)
     except Exception as e:
-        log("ERROR", e)
-
-class LogHandler(Handler):
-    def log(self, record):
-        servicemanager.LogInfoMsg(record.getMessage())
+        log(ID_ERR, "ERROR", ["Error:", f"Error checking directory {dir}: {e}"])
 
 class EventHandler(FileSystemEventHandler):
     def on_modified(self, event):
@@ -163,7 +163,7 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
     def SvcDoRun(self):
         try:
             self.ReportServiceStatus(win_svc.SERVICE_RUNNING)
-            log("INFO", "Service running")
+            log(ID_START, "INFO", ["Information:", "Service starting"])
 
             user = getLoggedOnUser()
             setDirs(user)
@@ -183,17 +183,17 @@ class FileOrganizerService(win_svc_util.ServiceFramework):
                 if ( code == win_event.WAIT_OBJECT_0 ):
                     break
         except Exception as e:
-            log("ERROR", e)
+            log(ID_ERR, "ERROR", ["Error:", f"An error occured while the service was running: {e}"])
 
     def SvcStop(self):
-        log("INFO", "Service stopping")
         self.ReportServiceStatus(win_svc.SERVICE_STOP_PENDING)
+        log(ID_STOP, "INFO", ["Information:", "Service is stopping"])
+
         win_event.SetEvent(self.event)
         self.obs1.stop()
         self.obs2.stop()
         self.obs1.join()
         self.obs2.join()
-        self.ReportServiceStatus(win_svc.SERVICE_STOPPED)
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
