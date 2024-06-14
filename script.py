@@ -1,6 +1,3 @@
-# Look at how this guy handles logging:
-# https://github.com/HaroldMills/Python-Windows-Service-Example/blob/master/example_service.py
-
 import os
 import shutil
 from watchdog.observers import Observer
@@ -27,8 +24,6 @@ def log(id, e, message):
 
     win32evtlogutil.ReportEvent("FileOrganizerService", id, eventType=event_type, strings=message)
     
->>>>>>> temp_branch
-
 def getLoggedOnUser():
     try:
         c = wmi.WMI()
